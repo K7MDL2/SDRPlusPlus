@@ -28,11 +28,27 @@
 #include <gui/widgets/snr_meter.h>
 #include <gui/tuner.h>
 
+// Added for RotaryEncoder GPIO using Pi Device Overlay
+#include <linux/input.h>
+#include <fcntl.h>
+#include <unistd.h>
+#define ENCODER_DEVICE "/dev/input/by-path/platform-rotary@12-event" // Adjust to your input device
+int enc_fd, max_fd;
+
 void MainWindow::init() {
     LoadingScreen::show("Initializing UI");
     gui::waterfall.init();
     gui::waterfall.setRawFFTSize(fftSize);
 
+	// Do once at startup, should only work on a RPi with dt overlay configured
+    enc_fd = open(ENCODER_DEVICE, O_RDONLY | O_NONBLOCK);
+    if (enc_fd < 0) {
+        flog::error("Failed to open encoder file input");
+    } else {
+		flog::info("Opened Encoder Device file");
+	}
+    max_fd = enc_fd;
+    
     credits::init();
 
     core::configManager.acquire();
@@ -607,7 +623,89 @@ void MainWindow::draw() {
             }
             core::configManager.release(true);
         }
-    }
+//    
+// _________ Read VFO Encoder ________________________________________
+//
+		struct input_event ev;
+		struct input_event enc_ev[64];
+		int encoder;
+		unsigned int enc_type, sw_type, enc_code;
+		int enc_value = 0;
+		int i, rd;
+		fd_set rdfs;
+		struct timeval tv;
+
+		// Handle VFO Encoder (Pi hardware only)
+		// see https://github.com/bilhew8078/Pi_rotary_encoder_and_switch/blob/master/src/encoder.c
+		
+		// On a RPi5 add this line to the /boot/firmware/config.txt to enable rotary encoder in the file system
+		// On a RPi4 add this line to the /boot/config.txt to enable rotary encoder in the file system
+		// dtoverlay=rotary-encoder,pin_a=18,pin_b=17,relative_axis=1,steps-per-period=2
+		
+		encoder = 0;
+		if (enc_fd >=0) {  // only do this if the file handle is valid, thus only on a RPi with the overlay configured
+			FD_ZERO(&rdfs);
+			FD_SET(enc_fd, &rdfs);
+			
+			// Wait up 5usec
+			tv.tv_sec = 0;
+			tv.tv_usec = 5;
+			select(max_fd + 1, &rdfs, NULL, NULL, &tv);
+			
+			if (FD_ISSET(enc_fd, &rdfs))
+			{
+				rd = read(enc_fd, enc_ev, sizeof(enc_ev));
+				if (rd < (int) sizeof(struct input_event)) {
+					flog::error("ENCODER: expected {0} bytes, got {1}", (int) sizeof(struct input_event), rd);
+				}
+				else
+				{
+					for (i = 0; i < (rd / sizeof(struct input_event)); i++)
+					{
+						enc_type = enc_ev[i].type;
+						enc_code = enc_ev[i].code;
+						enc_value = enc_ev[i].value;
+						flog::info("type = {0}  code={1}  value={2}  count={3}", enc_type, enc_code, enc_value, i);
+						if ((enc_type == EV_REL) && (enc_code == REL_X))  // REL_X for rotary encoder
+						{
+							flog::info("encoder value={0}", enc_value);
+							//enc_value = -enc_value;  // invert to make VFO increment correct direction
+						}
+						if (enc_value != 0) {
+							double nfreq;
+							if (vfo != NULL) {
+								// Select factor depending on modifier keys
+								double interval;
+								if (ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
+									interval = vfo->snapInterval * 10.0;
+								}
+								else if (ImGui::IsKeyDown(ImGuiKey_LeftAlt)) {
+									interval = vfo->snapInterval * 0.1;
+								}
+								else {
+									interval = vfo->snapInterval;
+								}
+
+								nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * enc_value);
+								nfreq = roundl(nfreq / interval) * interval;
+							}
+							else {
+								nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * enc_value / 20.0);
+							}
+							tuner::tune(tuningMode, gui::waterfall.selectedVFO, nfreq);
+							gui::freqSelect.setFrequency(nfreq);
+							core::configManager.acquire();
+							core::configManager.conf["frequency"] = gui::waterfall.getCenterFrequency();
+							if (vfo != NULL) {
+								core::configManager.conf["vfoOffsets"][gui::waterfall.selectedVFO] = vfo->generalOffset;
+							}
+							core::configManager.release(true);
+						}
+					}
+				}
+			}
+		} // end of valid file handle to rotary encoder data
+	} // end of !lock
 
     ImGui::NextColumn();
     ImGui::BeginChild("WaterfallControls");
