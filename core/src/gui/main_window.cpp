@@ -628,7 +628,7 @@ void MainWindow::draw() {
 //
 		struct input_event ev;
 		struct input_event enc_ev[64];
-		unsigned int enc_type, sw_type, enc_code;
+		unsigned int enc_type, enc_code, enc_count;
 		int enc_value = 0;
 		int i, rd;
 		fd_set rdfs;
@@ -663,13 +663,17 @@ void MainWindow::draw() {
 						enc_type = enc_ev[i].type;
 						enc_code = enc_ev[i].code;
 						enc_value = enc_ev[i].value;
-						flog::info("type = {0}  code={1}  value={2}  count={3}", enc_type, enc_code, enc_value, i);
+						//flog::info("type = {0}  code={1}  value={2}  count={3}", enc_type, enc_code, enc_value, i);
 						if ((enc_type == EV_REL) && (enc_code == REL_X))  // REL_X for rotary encoder
 						{
 							flog::info("encoder value={0}", enc_value);
 							enc_value = -enc_value;  // invert to make VFO increment correct direction
+                            enc_count = i;
 						}
 						if (enc_value != 0) {
+                            enc_count += 1;
+							enc_count *= enc_value; // make count directional
+                            flog::info("apply encoder change value={0} count={1}", enc_value, enc_count);
 							double nfreq;
 							if (vfo != NULL) {
 								// Select factor depending on modifier keys
@@ -684,11 +688,11 @@ void MainWindow::draw() {
 									interval = vfo->snapInterval;
 								}
 
-								nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * enc_value);
+								nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * enc_count);
 								nfreq = roundl(nfreq / interval) * interval;
 							}
 							else {
-								nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * enc_value / 20.0);
+								nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * enc_count / 20.0);
 							}
 							tuner::tune(tuningMode, gui::waterfall.selectedVFO, nfreq);
 							gui::freqSelect.setFrequency(nfreq);
