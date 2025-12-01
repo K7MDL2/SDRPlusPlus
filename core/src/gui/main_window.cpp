@@ -628,7 +628,7 @@ void MainWindow::draw() {
 //
 		struct input_event ev;
 		struct input_event enc_ev[64];
-		unsigned int enc_type, enc_code, enc_count;
+		int enc_type, enc_code, enc_count;
 		int enc_value = 0;
 		int i, rd;
 		fd_set rdfs;
