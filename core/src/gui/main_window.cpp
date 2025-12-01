@@ -628,7 +628,6 @@ void MainWindow::draw() {
 //
 		struct input_event ev;
 		struct input_event enc_ev[64];
-		int encoder;
 		unsigned int enc_type, sw_type, enc_code;
 		int enc_value = 0;
 		int i, rd;
@@ -642,7 +641,6 @@ void MainWindow::draw() {
 		// On a RPi4 add this line to the /boot/config.txt to enable rotary encoder in the file system
 		// dtoverlay=rotary-encoder,pin_a=18,pin_b=17,relative_axis=1,steps-per-period=2
 		
-		encoder = 0;
 		if (enc_fd >=0) {  // only do this if the file handle is valid, thus only on a RPi with the overlay configured
 			FD_ZERO(&rdfs);
 			FD_SET(enc_fd, &rdfs);
@@ -669,7 +667,7 @@ void MainWindow::draw() {
 						if ((enc_type == EV_REL) && (enc_code == REL_X))  // REL_X for rotary encoder
 						{
 							flog::info("encoder value={0}", enc_value);
-							//enc_value = -enc_value;  // invert to make VFO increment correct direction
+							enc_value = -enc_value;  // invert to make VFO increment correct direction
 						}
 						if (enc_value != 0) {
 							double nfreq;
