@@ -35,9 +35,7 @@ public:
 
 private:
     static void vfoAddedHandler(VFOManager::VFO* vfo, void* ctx);
-	int open_encoder(int device);
-    int read_encoder(int device);
-    
+   
     // FFT Variables
     int fftSize = 8192 * 8;
     std::mutex fft_mtx;
@@ -68,11 +66,20 @@ private:
     bool autostart = false;
 
 	#define __RASPI__  // eventually make this a CMake -Doption
-
+	
+	int open_encoder(int device);
+    int read_encoder(int device);
+    int read_switch(int device);
+	
 	#define E_VFO 		1
 	#define E_FFT_MIN 	2
 	#define E_FFT_MAX 	3
 	#define E_ZOOM 		4
+	#define E_FFT_TOGGLE   185
+	#define E_AUX1_TOGGLE  184
+	int enc_sw1 = E_FFT_MIN;
+	int enc_sw2 = E_ZOOM;
+	int e_dir = 0;
 
 	#ifdef __RASPI__   // for Pi only - customize if pins are changed	
 	// On a RPi5 add this line to the /boot/firmware/config.txt to enable rotary encoder in the file system
@@ -84,6 +91,8 @@ private:
 		const char* ENC_ZOOM = "/dev/input/by-path/platform-rotary@10-event"; //  for PinA=GPIO16
 		const char* ENC_FFT_MIN = "/dev/input/by-path/platform-rotary@14-event"; //  for PinA=GPIO20
 		const char* ENC_FFT_MAX = "/dev/input/by-path/platform-rotary@14-event"; //  for PinA=GPIO20 toggled function
+		const char* ENC_FFT_TOGGLE = "/dev/input/by-path/platform-button@19-event"; //  for PinA=GPIO25 toggle function
+		const char* ENC_AUX1_TOGGLE = "/dev/input/by-path/platform-button@8-event"; //  for PinA=GPIO8 toggle function
 	#endif
 
     EventHandler<VFOManager::VFO*> vfoCreatedHandler;

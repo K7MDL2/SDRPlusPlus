@@ -46,6 +46,8 @@ int MainWindow::open_encoder(int device) {
 		case E_FFT_MIN: encoder_dev = ENC_FFT_MIN; break;
 		case E_FFT_MAX: encoder_dev = ENC_FFT_MAX; break;
 		case E_ZOOM: encoder_dev = ENC_ZOOM; break;
+		case E_FFT_TOGGLE: encoder_dev = ENC_FFT_TOGGLE; break;
+		case E_AUX1_TOGGLE:  encoder_dev = ENC_AUX1_TOGGLE; break;
 		default: return -1;
 	}
 	
@@ -63,6 +65,72 @@ int MainWindow::open_encoder(int device) {
 #else
 	return 0;
 #endif
+}
+
+// Input: Switch device ID
+// Returns: 0 not pressed (OFF), 1 Pressed (ON).
+
+int MainWindow::read_switch(int device) {
+//    
+// _________ Read Switch____________________
+//
+#ifdef __RASPI__
+	struct input_event ev;
+	struct input_event sw_ev[64];
+	int sw_type, sw_code, sw_value;
+	int i, rd;
+	fd_set rdfs;
+	struct timeval tv;
+	static int FFT_TOGGLE_fd= -1;
+	static int AUX1_TOGGLE_fd = -1;
+	int sw_fd = -1;
+
+	// See https://github.com/bilhew8078/Pi_rotary_encoder_and_switch/blob/master/src/encoder.c
+	// Open file if not already open	
+	if (device == E_FFT_TOGGLE){
+		if (FFT_TOGGLE_fd == -1) {FFT_TOGGLE_fd = open_encoder(E_FFT_TOGGLE);}  // save fd
+		sw_fd = FFT_TOGGLE_fd;
+	}
+	if (device == E_AUX1_TOGGLE){
+		if (AUX1_TOGGLE_fd == -1) {AUX1_TOGGLE_fd = open_encoder(E_AUX1_TOGGLE);} // save fd
+		sw_fd = AUX1_TOGGLE_fd;
+	}
+	
+	if (sw_fd >=0) {
+		FD_ZERO(&rdfs);
+		FD_SET(sw_fd, &rdfs);
+			
+		// Wait up 5usec
+		tv.tv_sec = 0;
+		tv.tv_usec = 5;
+		select(sw_fd + 1, &rdfs, NULL, NULL, &tv);
+		
+		if (FD_ISSET(sw_fd, &rdfs))
+		{
+			rd = read(sw_fd, sw_ev, sizeof(sw_ev));
+			if (rd < (int) sizeof(struct input_event)) {
+				flog::error("READ_SWITCH: expected {0} bytes, got {1}", (int) sizeof(struct input_event), rd);
+			}
+			else
+			{
+				for (i = 0; i < (rd / sizeof(struct input_event)); i++)
+				{
+					sw_type = sw_ev[i].type;
+					sw_code = sw_ev[i].code;
+					sw_value = sw_ev[i].value;
+					//flog::info("READ_SWITCH: type = {0}  code={1}  value={2}  count={3}", sw_type, sw_code, sw_value, i);
+					if (sw_type == EV_KEY) {
+						if (sw_code == E_FFT_TOGGLE || sw_code == E_AUX1_TOGGLE) { 						
+						//flog::info("READ_SWITCH: value={0}", sw_value);
+						return sw_value;
+						}
+					}
+				}
+			}
+		}
+	}
+#endif
+	return 0;  // return 0 if nothing happened
 }
 
 // Input: Encoder device ID
@@ -118,7 +186,7 @@ int MainWindow::read_encoder(int device) {
 		{
 			rd = read(enc_fd, enc_ev, sizeof(enc_ev));
 			if (rd < (int) sizeof(struct input_event)) {
-				flog::error("ENCODER: expected {0} bytes, got {1}", (int) sizeof(struct input_event), rd);
+				flog::error("READ_ENCODER: expected {0} bytes, got {1}", (int) sizeof(struct input_event), rd);
 			}
 			else
 			{
@@ -128,7 +196,7 @@ int MainWindow::read_encoder(int device) {
 					enc_type = enc_ev[i].type;
 					enc_code = enc_ev[i].code;
 					enc_value = enc_ev[i].value;
-					//flog::info("type = {0}  code={1}  value={2}  count={3}", enc_type, enc_code, enc_value, i);
+					//flog::info("READ_ENCODER: type = {0}  code={1}  value={2}  count={3}", enc_type, enc_code, enc_value, i);
 					if ((enc_type == EV_REL) && (enc_code == REL_X))  // REL_X for rotary encoder
 					{
 						enc_value = -enc_value;  // invert to make VFO increment correct direction
@@ -137,7 +205,7 @@ int MainWindow::read_encoder(int device) {
 					if (enc_value != 0) {
 						enc_count += 1;
 						enc_count *= enc_value; // make count directional
-						//flog::info("ENCODER: Apply encoder change value={0} count={1}", enc_value, enc_count);
+						//flog::info("READ_ENCODER:  Apply encoder change value={0} count={1}", enc_value, enc_count);
 						return enc_count;
 					} else {
 						enc_count = 0;
@@ -789,13 +857,28 @@ void MainWindow::draw() {
         }
     }
     
-    int e_dir = 0;
-    if ((e_dir = read_encoder(E_ZOOM)) != 0) {  // read Encoder
-		flog::info("ZOOM:1 bw={0}", bw);
+    if ((e_dir = read_switch(E_FFT_TOGGLE)) !=0) { // read switch 
+		//flog::info("SWITCH: type = {0}  state={1}", E_FFT_TOGGLE, e_dir);
+		if (enc_sw1 == E_FFT_MIN)
+			enc_sw1 = E_FFT_MAX;
+		else
+			enc_sw1 = E_FFT_MIN;
+	}	
+	
+	if ((e_dir = read_switch(E_AUX1_TOGGLE)) !=0) { // read switch 
+		//flog::info("SWITCH: type = {0}  state={1}", E_AUX1_TOGGLE, e_dir);
+		if (enc_sw2 == E_ZOOM)
+			enc_sw2 = E_FFT_MAX;
+		else
+			enc_sw2 = E_ZOOM;
+	}
+	
+    if ((enc_sw2 == E_ZOOM) && (e_dir = read_encoder(E_ZOOM)) != 0) {  // read Encoder
+		//flog::info("ZOOM:1 bw={0}", bw);
 		bw += 0.03*e_dir;
 		if (bw >= 1.0) bw = 1.0;
 		if (bw <= 0.0) bw = 0.0;
-		flog::info("ZOOM:2 bw={0}", bw);
+		//flog::info("ZOOM:2 bw={0}", bw);
 	    double factor = (double)bw * (double)bw;
 
         // Map 0.0 -> 1.0 to 1000.0 -> bandwidth
@@ -820,9 +903,8 @@ void MainWindow::draw() {
         core::configManager.conf["max"] = fftMax;
         core::configManager.release(true);
     }
-    
 
-	if ((e_dir = read_encoder(E_VFO)) != 0) {  // read Encoder
+	if ((enc_sw1 == E_FFT_MAX) && (e_dir = read_encoder(E_FFT_MAX)) != 0) {  // read Encoder
         fftMax += (e_dir*5);
         if (fftMax >= 0) fftMax = 0;
         fftMax = std::max<float>(fftMax, fftMin + 10);
@@ -844,7 +926,7 @@ void MainWindow::draw() {
         core::configManager.release(true);
     }
     
-    if ((e_dir = read_encoder(E_FFT_MIN)) != 0) {  // read encoder
+    if ((enc_sw1 == E_FFT_MIN) && (e_dir = read_encoder(E_FFT_MIN)) != 0) {  // read encoder
         fftMin += (e_dir*5);
         if (fftMin <= -155) fftMin = -155;
         fftMin = std::min<float>(fftMax - 10, fftMin);
