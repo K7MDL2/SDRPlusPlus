@@ -1,7 +1,7 @@
 # SDR++, The bloat-free SDR software<br>
 
 > [!NOTE]
- This is a SDR++ fork focused on testing out Raspberry Pi GPIO feature additions.  See Wiki Page link below for change notes.
+ This is a SDR++ fork focused on testing out Raspberry Pi GPIO feature additions like enncoders for VFO and some switches.  See Wiki Page link below for change notes.
 > https://github.com/K7MDL2/SDRPlusPlus/wiki/Change-History
 >
 > Below is original content
