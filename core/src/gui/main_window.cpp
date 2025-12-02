@@ -32,22 +32,123 @@
 #include <linux/input.h>
 #include <fcntl.h>
 #include <unistd.h>
-#define ENCODER_DEVICE "/dev/input/by-path/platform-rotary@12-event" // Adjust to your input device
-int enc_fd, max_fd;
+
+
+// Input: device ID (ENC_VFO, ENC_FFT_MIN, ENC_FFT_MAX)
+// Returns: -1 for fail to open, else the fd handle
+
+int MainWindow::open_encoder(int device) {
+#ifdef __RASPI__
+	const char * encoder_dev;
+
+	switch (device) {
+		case E_VFO: encoder_dev = ENC_VFO; break;
+		case E_FFT_MIN: encoder_dev = ENC_FFT_MIN; break;
+		case E_FFT_MAX: encoder_dev = ENC_FFT_MAX; break;
+		default: return -1;
+	}
+	
+	// Do once at startup, should only work on a RPi
+	// Requires dt_overlay configured for each device
+    int enc_fd = open(encoder_dev, O_RDONLY | O_NONBLOCK);
+    if (enc_fd < 0) {
+        flog::error("ENCODER: Failed to open encoder file input {0}  fh={1}", encoder_dev, enc_fd);
+    } else {
+		flog::info("ENCODER: Opened Encoder Device file {0}  fh={1}", encoder_dev, enc_fd);
+	}
+    //max_fd = enc_fd;
+    //flog::info("ENCODER: return fh = {0}", enc_fd);
+	return enc_fd;
+#else
+	return 0;
+#endif
+}
+
+// Input: Encoder device ID
+// Returns: 0 if no action, +/- count value if encoder moved.
+
+int MainWindow::read_encoder(int device) {
+//    
+// _________ Read Encoders ________________________________________
+//
+#ifdef __RASPI__
+	struct input_event ev;
+	struct input_event enc_ev[64];
+	int enc_type, enc_code, enc_count;
+	int enc_value = 0;
+	int i, rd;
+	fd_set rdfs;
+	struct timeval tv;
+	static int VFO_fd= -1;
+	static int FFT_MIN_fd = -1;
+	static int FFT_MAX_fd = -1;
+	int enc_fd = -1;
+
+	// See https://github.com/bilhew8078/Pi_rotary_encoder_and_switch/blob/master/src/encoder.c
+	// Open file if not already open	
+	if (device == E_VFO){
+		if (VFO_fd == -1) {VFO_fd = open_encoder(E_VFO);}  // save fd
+		enc_fd = VFO_fd;
+	}
+	if (device == E_FFT_MIN){
+		if (FFT_MIN_fd == -1) {FFT_MIN_fd = open_encoder(E_FFT_MIN);} // save fd
+		enc_fd = FFT_MIN_fd;
+	}
+	if (device == E_FFT_MAX){
+		if (FFT_MAX_fd == -1) {FFT_MAX_fd = open_encoder(E_FFT_MAX);}  // save fd
+		enc_fd = FFT_MAX_fd;
+	}
+	
+	if (enc_fd >=0) {
+		FD_ZERO(&rdfs);
+		FD_SET(enc_fd, &rdfs);
+			
+		// Wait up 5usec
+		tv.tv_sec = 0;
+		tv.tv_usec = 5;
+		select(enc_fd + 1, &rdfs, NULL, NULL, &tv);
+		
+		if (FD_ISSET(enc_fd, &rdfs))
+		{
+			rd = read(enc_fd, enc_ev, sizeof(enc_ev));
+			if (rd < (int) sizeof(struct input_event)) {
+				flog::error("ENCODER: expected {0} bytes, got {1}", (int) sizeof(struct input_event), rd);
+			}
+			else
+			{
+				enc_count = 0;
+				for (i = 0; i < (rd / sizeof(struct input_event)); i++)
+				{
+					enc_type = enc_ev[i].type;
+					enc_code = enc_ev[i].code;
+					enc_value = enc_ev[i].value;
+					//flog::info("type = {0}  code={1}  value={2}  count={3}", enc_type, enc_code, enc_value, i);
+					if ((enc_type == EV_REL) && (enc_code == REL_X))  // REL_X for rotary encoder
+					{
+						enc_value = -enc_value;  // invert to make VFO increment correct direction
+						enc_count = i;
+					}
+					if (enc_value != 0) {
+						enc_count += 1;
+						enc_count *= enc_value; // make count directional
+						flog::info("ENCODER: Apply encoder change value={0} count={1}", enc_value, enc_count);
+						return enc_count;
+					} else {
+						enc_count = 0;
+					}
+				}
+			}
+		}
+	}
+#endif
+	return 0;  // return 0 counts if nothing happened
+}
 
 void MainWindow::init() {
     LoadingScreen::show("Initializing UI");
     gui::waterfall.init();
     gui::waterfall.setRawFFTSize(fftSize);
 
-	// Do once at startup, should only work on a RPi with dt overlay configured
-    enc_fd = open(ENCODER_DEVICE, O_RDONLY | O_NONBLOCK);
-    if (enc_fd < 0) {
-        flog::error("Failed to open encoder file input");
-    } else {
-		flog::info("Opened Encoder Device file");
-	}
-    max_fd = enc_fd;
     
     credits::init();
 
@@ -623,90 +724,42 @@ void MainWindow::draw() {
             }
             core::configManager.release(true);
         }
-//    
-// _________ Read VFO Encoder ________________________________________
-//
-		struct input_event ev;
-		struct input_event enc_ev[64];
-		int enc_type, enc_code, enc_count;
-		int enc_value = 0;
-		int i, rd;
-		fd_set rdfs;
-		struct timeval tv;
 
-		// Handle VFO Encoder (Pi hardware only)
-		// see https://github.com/bilhew8078/Pi_rotary_encoder_and_switch/blob/master/src/encoder.c
-		
-		// On a RPi5 add this line to the /boot/firmware/config.txt to enable rotary encoder in the file system
-		// On a RPi4 add this line to the /boot/config.txt to enable rotary encoder in the file system
-		// dtoverlay=rotary-encoder,pin_a=18,pin_b=17,relative_axis=1,steps-per-period=2
-		
-		if (enc_fd >=0) {  // only do this if the file handle is valid, thus only on a RPi with the overlay configured
-			FD_ZERO(&rdfs);
-			FD_SET(enc_fd, &rdfs);
-			
-			// Wait up 5usec
-			tv.tv_sec = 0;
-			tv.tv_usec = 5;
-			select(max_fd + 1, &rdfs, NULL, NULL, &tv);
-			
-			if (FD_ISSET(enc_fd, &rdfs))
-			{
-				rd = read(enc_fd, enc_ev, sizeof(enc_ev));
-				if (rd < (int) sizeof(struct input_event)) {
-					flog::error("ENCODER: expected {0} bytes, got {1}", (int) sizeof(struct input_event), rd);
+		#ifdef __RASPI__
+		// Handle VFO Encoder
+		int enc_count = read_encoder(E_VFO);  // read VFO
+		if (enc_count != 0) {			
+			double nfreq;
+			if (vfo != NULL) {
+				// Select factor depending on modifier keys
+				double interval;
+				if (ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
+					interval = vfo->snapInterval * 10.0;
 				}
-				else
-				{
-					for (i = 0; i < (rd / sizeof(struct input_event)); i++)
-					{
-						enc_type = enc_ev[i].type;
-						enc_code = enc_ev[i].code;
-						enc_value = enc_ev[i].value;
-						//flog::info("type = {0}  code={1}  value={2}  count={3}", enc_type, enc_code, enc_value, i);
-						if ((enc_type == EV_REL) && (enc_code == REL_X))  // REL_X for rotary encoder
-						{
-							flog::info("encoder value={0}", enc_value);
-							enc_value = -enc_value;  // invert to make VFO increment correct direction
-                            enc_count = i;
-						}
-						if (enc_value != 0) {
-                            enc_count += 1;
-							enc_count *= enc_value; // make count directional
-                            flog::info("apply encoder change value={0} count={1}", enc_value, enc_count);
-							double nfreq;
-							if (vfo != NULL) {
-								// Select factor depending on modifier keys
-								double interval;
-								if (ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
-									interval = vfo->snapInterval * 10.0;
-								}
-								else if (ImGui::IsKeyDown(ImGuiKey_LeftAlt)) {
-									interval = vfo->snapInterval * 0.1;
-								}
-								else {
-									interval = vfo->snapInterval;
-								}
+				else if (ImGui::IsKeyDown(ImGuiKey_LeftAlt)) {
+					interval = vfo->snapInterval * 0.1;
+				}
+				else {
+					interval = vfo->snapInterval;
+				}
 
-								nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * enc_count);
-								nfreq = roundl(nfreq / interval) * interval;
-							}
-							else {
-								nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * enc_count / 20.0);
-							}
-							tuner::tune(tuningMode, gui::waterfall.selectedVFO, nfreq);
-							gui::freqSelect.setFrequency(nfreq);
-							core::configManager.acquire();
-							core::configManager.conf["frequency"] = gui::waterfall.getCenterFrequency();
-							if (vfo != NULL) {
-								core::configManager.conf["vfoOffsets"][gui::waterfall.selectedVFO] = vfo->generalOffset;
-							}
-							core::configManager.release(true);
-						}
-					}
-				}
+				nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * enc_count);
+				nfreq = roundl(nfreq / interval) * interval;
 			}
-		} // end of valid file handle to rotary encoder data
+			else {
+				nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * enc_count / 20.0);
+			}
+			tuner::tune(tuningMode, gui::waterfall.selectedVFO, nfreq);
+			gui::freqSelect.setFrequency(nfreq);
+			core::configManager.acquire();
+			core::configManager.conf["frequency"] = gui::waterfall.getCenterFrequency();
+			if (vfo != NULL) {
+				core::configManager.conf["vfoOffsets"][gui::waterfall.selectedVFO] = vfo->generalOffset;
+			}
+			core::configManager.release(true);
+		} // end of VFO encoder read
+		#endif // __RASPI__
+		
 	} // end of !lock
 
     ImGui::NextColumn();
@@ -721,7 +774,7 @@ void MainWindow::draw() {
 
         // Map 0.0 -> 1.0 to 1000.0 -> bandwidth
         double wfBw = gui::waterfall.getBandwidth();
-        double delta = wfBw - 1000.0;
+        double delta = wfBw - 1000.0;			
         double finalBw = std::min<double>(1000.0 + (factor * delta), wfBw);
 
         gui::waterfall.setViewBandwidth(finalBw);
@@ -741,6 +794,16 @@ void MainWindow::draw() {
         core::configManager.conf["max"] = fftMax;
         core::configManager.release(true);
     }
+    
+    int e_dir = 0;
+	if ((e_dir = read_encoder(E_FFT_MAX)) != 0) {  // read Encoder
+        fftMax += (e_dir*5);
+        if (fftMax >= 0) fftMax = 0;
+        fftMax = std::max<float>(fftMax, fftMin + 10);
+        core::configManager.acquire();
+		core::configManager.conf["max"] = fftMax;
+        core::configManager.release(true);       
+	}
 
     ImGui::NewLine();
 
@@ -754,6 +817,15 @@ void MainWindow::draw() {
         core::configManager.conf["min"] = fftMin;
         core::configManager.release(true);
     }
+    
+    if ((e_dir = read_encoder(E_FFT_MIN)) != 0) {  // read encoder
+        fftMin += (e_dir*5);
+        if (fftMin <= -155) fftMin = -155;
+        fftMin = std::min<float>(fftMax - 10, fftMin);
+        core::configManager.acquire();
+		core::configManager.conf["min"] = fftMin;
+        core::configManager.release(true);       
+	}
 
     ImGui::EndChild();
 
