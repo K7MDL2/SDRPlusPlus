@@ -45,6 +45,7 @@ int MainWindow::open_encoder(int device) {
 		case E_VFO: encoder_dev = ENC_VFO; break;
 		case E_FFT_MIN: encoder_dev = ENC_FFT_MIN; break;
 		case E_FFT_MAX: encoder_dev = ENC_FFT_MAX; break;
+		case E_ZOOM: encoder_dev = ENC_ZOOM; break;
 		default: return -1;
 	}
 	
@@ -82,6 +83,7 @@ int MainWindow::read_encoder(int device) {
 	static int VFO_fd= -1;
 	static int FFT_MIN_fd = -1;
 	static int FFT_MAX_fd = -1;
+	static int ZOOM_fd = -1;
 	int enc_fd = -1;
 
 	// See https://github.com/bilhew8078/Pi_rotary_encoder_and_switch/blob/master/src/encoder.c
@@ -97,6 +99,10 @@ int MainWindow::read_encoder(int device) {
 	if (device == E_FFT_MAX){
 		if (FFT_MAX_fd == -1) {FFT_MAX_fd = open_encoder(E_FFT_MAX);}  // save fd
 		enc_fd = FFT_MAX_fd;
+	}
+	if (device == E_ZOOM){
+		if (ZOOM_fd == -1) {ZOOM_fd = open_encoder(E_ZOOM);}  // save fd
+		enc_fd = ZOOM_fd;
 	}
 	
 	if (enc_fd >=0) {
@@ -131,7 +137,7 @@ int MainWindow::read_encoder(int device) {
 					if (enc_value != 0) {
 						enc_count += 1;
 						enc_count *= enc_value; // make count directional
-						flog::info("ENCODER: Apply encoder change value={0} count={1}", enc_value, enc_count);
+						//flog::info("ENCODER: Apply encoder change value={0} count={1}", enc_value, enc_count);
 						return enc_count;
 					} else {
 						enc_count = 0;
@@ -782,6 +788,26 @@ void MainWindow::draw() {
             gui::waterfall.setViewOffset(vfo->centerOffset); // center vfo on screen
         }
     }
+    
+    int e_dir = 0;
+    if ((e_dir = read_encoder(E_ZOOM)) != 0) {  // read Encoder
+		flog::info("ZOOM:1 bw={0}", bw);
+		bw += 0.03*e_dir;
+		if (bw >= 1.0) bw = 1.0;
+		if (bw <= 0.0) bw = 0.0;
+		flog::info("ZOOM:2 bw={0}", bw);
+	    double factor = (double)bw * (double)bw;
+
+        // Map 0.0 -> 1.0 to 1000.0 -> bandwidth
+        double wfBw = gui::waterfall.getBandwidth();
+        double delta = wfBw - 1000.0;			
+        double finalBw = std::min<double>(1000.0 + (factor * delta), wfBw);
+
+        gui::waterfall.setViewBandwidth(finalBw);
+        if (vfo != NULL) {
+            gui::waterfall.setViewOffset(vfo->centerOffset); // center vfo on screen
+        }
+    }
 
     ImGui::NewLine();
 
@@ -795,8 +821,8 @@ void MainWindow::draw() {
         core::configManager.release(true);
     }
     
-    int e_dir = 0;
-	if ((e_dir = read_encoder(E_FFT_MAX)) != 0) {  // read Encoder
+
+	if ((e_dir = read_encoder(E_VFO)) != 0) {  // read Encoder
         fftMax += (e_dir*5);
         if (fftMax >= 0) fftMax = 0;
         fftMax = std::max<float>(fftMax, fftMin + 10);
