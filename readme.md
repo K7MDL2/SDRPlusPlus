@@ -1,8 +1,8 @@
 # SDR++, The bloat-free SDR software<br>
 
 > [!NOTE]
-> This is a SDR++ fork focused on adding Raspberry Pi GPIO feature additions like GPIO rotary encoders for VFO, FFT MIN and MAX, ZOOM, and later some switches.
-> See Wiki Page link below for change notes.
+> This is a SDR++ fork focused on adding Raspberry Pi GPIO feature additions like GPIO rotary encoders for VFO, FFT MIN and MAX, ZOOM, and later some switches.  I do not have precompiled releases or nightly builds.  There is currently only the main branch.  You must build from source which is easy to do.
+> See Wiki Page link below for change notes. 
 > 
 > https://github.com/K7MDL2/SDRPlusPlus/wiki/Change-History
 >
