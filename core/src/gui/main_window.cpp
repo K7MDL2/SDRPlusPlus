@@ -865,12 +865,22 @@ void MainWindow::draw() {
 			enc_sw1 = E_FFT_MIN;
 	}	
 	
-	if ((e_dir = read_switch(E_AUX1_TOGGLE)) !=0) { // read switch 
-		//flog::info("SWITCH: type = {0}  state={1}", E_AUX1_TOGGLE, e_dir);
+	if ((e_dir = read_switch(E_AUX1_TOGGLE)) !=0) { // read switch 		
 		if (enc_sw2 == E_ZOOM)
-			enc_sw2 = E_FFT_MAX;
+			enc_sw2 = E_SNAP_INTERVAL;
 		else
 			enc_sw2 = E_ZOOM;
+	}
+	
+	if ((enc_sw2 == E_SNAP_INTERVAL) && (e_dir = read_encoder(E_ZOOM)) != 0) {
+		static int interval_encoder = 10;
+		if (e_dir == 1) { if (interval_encoder >= 1) interval_encoder *= 10; }
+		else { if (interval_encoder >= 10) interval_encoder /= 10;}
+		if (interval_encoder < 1) interval_encoder = 1;
+		if (interval_encoder > 100000000) interval_encoder = 100000000;
+		vfo->snapInterval = interval_encoder;
+		vfo->setSnapInterval(vfo->snapInterval);
+		//flog::info("SWITCH: dir = {0}  interval = {1}", e_dir, vfo->snapInterval);
 	}
 	
     if ((enc_sw2 == E_ZOOM) && (e_dir = read_encoder(E_ZOOM)) != 0) {  // read Encoder

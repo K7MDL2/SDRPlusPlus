@@ -75,6 +75,7 @@ private:
 	#define E_FFT_MIN 	2
 	#define E_FFT_MAX 	3
 	#define E_ZOOM 		4
+	#define E_SNAP_INTERVAL  5
 	#define E_FFT_TOGGLE   185
 	#define E_AUX1_TOGGLE  184
 	int enc_sw1 = E_FFT_MIN;
