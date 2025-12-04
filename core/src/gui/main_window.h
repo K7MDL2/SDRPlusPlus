@@ -67,19 +67,25 @@ private:
 
 	#define __RASPI__  // eventually make this a CMake -Doption
 	
-	int open_encoder(int device);
+	int open_GPIO_device(int device);
     int read_encoder(int device);
     int read_switch(int device);
 	
-	#define E_VFO 		1
-	#define E_FFT_MIN 	2
-	#define E_FFT_MAX 	3
-	#define E_ZOOM 		4
-	#define E_SNAP_INTERVAL  5
-	#define E_FFT_TOGGLE   185
-	#define E_AUX1_TOGGLE  184
-	int enc_sw1 = E_FFT_MIN;
-	int enc_sw2 = E_ZOOM;
+	#define _VFO 		1  // role IDs to assign to an encoder
+	#define _FFT_MIN 	2
+	#define _FFT_MAX 	3
+	#define _ZOOM 		4
+	#define _SNAP_INTERVAL  5
+	
+	#define _VFO_ENC   6 // encoder device IDs
+	#define _AUX1_ENC  7  
+	#define _AUX2_ENC  8
+	
+	#define _AUX1_SW  185  // GPIO key IDs (key code)
+	#define _AUX2_SW  184
+	
+	int enc_aux1_sw = _FFT_MIN;  	// default function assignment to encoder Aux1
+	int enc_aux2_sw = _ZOOM;		// default function assignment to encoder Aux2
 	int e_dir = 0;
 
 	#ifdef __RASPI__   // for Pi only - customize if pins are changed	
@@ -87,13 +93,11 @@ private:
 	// On a RPi4 add this line to the /boot/config.txt to enable rotary encoder in the file system
 	// dtoverlay=rotary-encoder,pin_a=18,pin_b=17,relative_axis=1,steps-per-period=1
 	// Do the same for additional encoders with their pin numbers
-		const char* ENC_VFO = "/dev/input/by-path/platform-rotary@12-event";  // for PinA=GPIO18
-		// rotary@12 is a rotary encoder with a Pin A gpio address of hex 12, or IO18 decimal.
-		const char* ENC_ZOOM = "/dev/input/by-path/platform-rotary@10-event"; //  for PinA=GPIO16
-		const char* ENC_FFT_MIN = "/dev/input/by-path/platform-rotary@14-event"; //  for PinA=GPIO20
-		const char* ENC_FFT_MAX = "/dev/input/by-path/platform-rotary@14-event"; //  for PinA=GPIO20 toggled function
-		const char* ENC_FFT_TOGGLE = "/dev/input/by-path/platform-button@19-event"; //  for PinA=GPIO25 toggle function
-		const char* ENC_AUX1_TOGGLE = "/dev/input/by-path/platform-button@8-event"; //  for PinA=GPIO8 toggle function
+		const char* ENC_VFO = "/dev/input/by-path/platform-rotary@12-event";  // for PinA=GPIO18 (0x12)
+		const char* ENC_AUX1 = "/dev/input/by-path/platform-rotary@14-event"; //  for PinA=GPIO20 (0x14)
+		const char* ENC_AUX2 = "/dev/input/by-path/platform-rotary@10-event"; //  for PinA=GPIO16 (0x10)
+		const char* ENC_AUX1_SW = "/dev/input/by-path/platform-button@19-event"; //  for PinA=GPIO25 toggle function (0x19)
+		const char* ENC_AUX2_SW = "/dev/input/by-path/platform-button@8-event"; //  for PinA=GPIO8 toggle function (0x8)
 	#endif
 
     EventHandler<VFOManager::VFO*> vfoCreatedHandler;

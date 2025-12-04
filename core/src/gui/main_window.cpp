@@ -37,17 +37,16 @@
 // Input: device ID (ENC_VFO, ENC_FFT_MIN, ENC_FFT_MAX)
 // Returns: -1 for fail to open, else the fd handle
 
-int MainWindow::open_encoder(int device) {
+int MainWindow::open_GPIO_device(int device) {
 #ifdef __RASPI__
 	const char * encoder_dev;
 
 	switch (device) {
-		case E_VFO: encoder_dev = ENC_VFO; break;
-		case E_FFT_MIN: encoder_dev = ENC_FFT_MIN; break;
-		case E_FFT_MAX: encoder_dev = ENC_FFT_MAX; break;
-		case E_ZOOM: encoder_dev = ENC_ZOOM; break;
-		case E_FFT_TOGGLE: encoder_dev = ENC_FFT_TOGGLE; break;
-		case E_AUX1_TOGGLE:  encoder_dev = ENC_AUX1_TOGGLE; break;
+		case _VFO_ENC: encoder_dev = ENC_VFO; break;
+		case _AUX1_ENC: encoder_dev = ENC_AUX1; break;
+		case _AUX2_ENC: encoder_dev = ENC_AUX2; break;
+		case _AUX1_SW: encoder_dev = ENC_AUX1_SW; break;
+		case _AUX2_SW: encoder_dev = ENC_AUX2_SW; break;
 		default: return -1;
 	}
 	
@@ -81,19 +80,19 @@ int MainWindow::read_switch(int device) {
 	int i, rd;
 	fd_set rdfs;
 	struct timeval tv;
-	static int FFT_TOGGLE_fd= -1;
-	static int AUX1_TOGGLE_fd = -1;
+	static int AUX1_SW_fd= -1;
+	static int AUX2_SW_fd = -1;
 	int sw_fd = -1;
 
 	// See https://github.com/bilhew8078/Pi_rotary_encoder_and_switch/blob/master/src/encoder.c
 	// Open file if not already open	
-	if (device == E_FFT_TOGGLE){
-		if (FFT_TOGGLE_fd == -1) {FFT_TOGGLE_fd = open_encoder(E_FFT_TOGGLE);}  // save fd
-		sw_fd = FFT_TOGGLE_fd;
+	if (device == _AUX1_SW){
+		if (AUX1_SW_fd == -1) {AUX1_SW_fd = open_GPIO_device(_AUX1_SW);}  // save fd
+		sw_fd = AUX1_SW_fd;
 	}
-	if (device == E_AUX1_TOGGLE){
-		if (AUX1_TOGGLE_fd == -1) {AUX1_TOGGLE_fd = open_encoder(E_AUX1_TOGGLE);} // save fd
-		sw_fd = AUX1_TOGGLE_fd;
+	if (device == _AUX2_SW){
+		if (AUX2_SW_fd == -1) {AUX2_SW_fd = open_GPIO_device(_AUX2_SW);} // save fd
+		sw_fd = AUX2_SW_fd;
 	}
 	
 	if (sw_fd >=0) {
@@ -120,7 +119,7 @@ int MainWindow::read_switch(int device) {
 					sw_value = sw_ev[i].value;
 					//flog::info("READ_SWITCH: type = {0}  code={1}  value={2}  count={3}", sw_type, sw_code, sw_value, i);
 					if (sw_type == EV_KEY) {
-						if (sw_code == E_FFT_TOGGLE || sw_code == E_AUX1_TOGGLE) { 						
+						if (sw_code == _AUX1_SW || sw_code == _AUX2_SW) { 						
 						//flog::info("READ_SWITCH: value={0}", sw_value);
 						return sw_value;
 						}
@@ -148,29 +147,24 @@ int MainWindow::read_encoder(int device) {
 	int i, rd;
 	fd_set rdfs;
 	struct timeval tv;
-	static int VFO_fd= -1;
-	static int FFT_MIN_fd = -1;
-	static int FFT_MAX_fd = -1;
-	static int ZOOM_fd = -1;
+	static int ENC_VFO_fd= -1;
+	static int ENC_AUX1_fd = -1;
+	static int ENC_AUX2_fd = -1;
 	int enc_fd = -1;
 
 	// See https://github.com/bilhew8078/Pi_rotary_encoder_and_switch/blob/master/src/encoder.c
 	// Open file if not already open	
-	if (device == E_VFO){
-		if (VFO_fd == -1) {VFO_fd = open_encoder(E_VFO);}  // save fd
-		enc_fd = VFO_fd;
+	if (device == _VFO_ENC) {
+		if (ENC_VFO_fd == -1) {ENC_VFO_fd = open_GPIO_device(_VFO_ENC);}  // save fd
+		enc_fd = ENC_VFO_fd;
 	}
-	if (device == E_FFT_MIN){
-		if (FFT_MIN_fd == -1) {FFT_MIN_fd = open_encoder(E_FFT_MIN);} // save fd
-		enc_fd = FFT_MIN_fd;
+	if (device == _AUX1_ENC) {
+		if (ENC_AUX1_fd == -1) {ENC_AUX1_fd = open_GPIO_device(_AUX1_ENC);} // save fd
+		enc_fd = ENC_AUX1_fd;
 	}
-	if (device == E_FFT_MAX){
-		if (FFT_MAX_fd == -1) {FFT_MAX_fd = open_encoder(E_FFT_MAX);}  // save fd
-		enc_fd = FFT_MAX_fd;
-	}
-	if (device == E_ZOOM){
-		if (ZOOM_fd == -1) {ZOOM_fd = open_encoder(E_ZOOM);}  // save fd
-		enc_fd = ZOOM_fd;
+	if (device == _AUX2_ENC) {
+		if (ENC_AUX2_fd == -1) {ENC_AUX2_fd = open_GPIO_device(_AUX2_ENC);}  // save fd
+		enc_fd = ENC_AUX2_fd;
 	}
 	
 	if (enc_fd >=0) {
@@ -801,7 +795,7 @@ void MainWindow::draw() {
 
 		#ifdef __RASPI__
 		// Handle VFO Encoder
-		int enc_count = read_encoder(E_VFO);  // read VFO
+		int enc_count = read_encoder(_VFO_ENC);  // read encoder assigned to VFO
 		if (enc_count != 0) {			
 			double nfreq;
 			if (vfo != NULL) {
@@ -857,22 +851,27 @@ void MainWindow::draw() {
         }
     }
     
-    if ((e_dir = read_switch(E_FFT_TOGGLE)) !=0) { // read switch 
-		//flog::info("SWITCH: type = {0}  state={1}", E_FFT_TOGGLE, e_dir);
-		if (enc_sw1 == E_FFT_MIN)
-			enc_sw1 = E_FFT_MAX;
-		else
-			enc_sw1 = E_FFT_MIN;
+    if ((e_dir = read_switch(_AUX1_SW)) !=0) { // read switch 
+		if (enc_aux1_sw == _FFT_MIN) {
+			enc_aux1_sw = _FFT_MAX;
+			//flog::info("SWITCH AUX1: FFT_MAX Active");
+		} else {
+			enc_aux1_sw = _FFT_MIN;
+			//flog::info("SWITCH AUX1: FFT_MIN Active");
+		}
 	}	
 	
-	if ((e_dir = read_switch(E_AUX1_TOGGLE)) !=0) { // read switch 		
-		if (enc_sw2 == E_ZOOM)
-			enc_sw2 = E_SNAP_INTERVAL;
-		else
-			enc_sw2 = E_ZOOM;
+	if ((e_dir = read_switch(_AUX2_SW)) !=0) { // read switch 		
+		if (enc_aux2_sw == _ZOOM) {
+			enc_aux2_sw = _SNAP_INTERVAL;
+			//flog::info("SWITCH AUX2: SNAP INTERVAL Active");
+		} else {
+			enc_aux2_sw = _ZOOM;
+			//flog::info("SWITCH Aux2: ZOOM Active");
+		}
 	}
 	
-	if ((enc_sw2 == E_SNAP_INTERVAL) && (e_dir = read_encoder(E_ZOOM)) != 0) {
+	if ((enc_aux2_sw == _SNAP_INTERVAL) && (e_dir = read_encoder(_AUX2_ENC)) != 0) {
 		static int interval_encoder = 10;
 		if (e_dir == 1) { if (interval_encoder >= 1) interval_encoder *= 10; }
 		else { if (interval_encoder >= 10) interval_encoder /= 10;}
@@ -883,7 +882,7 @@ void MainWindow::draw() {
 		//flog::info("SWITCH: dir = {0}  interval = {1}", e_dir, vfo->snapInterval);
 	}
 	
-    if ((enc_sw2 == E_ZOOM) && (e_dir = read_encoder(E_ZOOM)) != 0) {  // read Encoder
+    if ((enc_aux2_sw == _ZOOM) && (e_dir = read_encoder(_AUX2_ENC)) != 0) {  // read Encoder
 		//flog::info("ZOOM:1 bw={0}", bw);
 		bw += 0.03*e_dir;
 		if (bw >= 1.0) bw = 1.0;
@@ -914,7 +913,7 @@ void MainWindow::draw() {
         core::configManager.release(true);
     }
 
-	if ((enc_sw1 == E_FFT_MAX) && (e_dir = read_encoder(E_FFT_MAX)) != 0) {  // read Encoder
+	if ((enc_aux1_sw == _FFT_MAX) && (e_dir = read_encoder(_AUX1_ENC)) != 0) {  // read Encoder
         fftMax += (e_dir*5);
         if (fftMax >= 0) fftMax = 0;
         fftMax = std::max<float>(fftMax, fftMin + 10);
@@ -936,7 +935,7 @@ void MainWindow::draw() {
         core::configManager.release(true);
     }
     
-    if ((enc_sw1 == E_FFT_MIN) && (e_dir = read_encoder(E_FFT_MIN)) != 0) {  // read encoder
+    if ((enc_aux1_sw == _FFT_MIN) && (e_dir = read_encoder(_AUX1_ENC)) != 0) {  // read encoder
         fftMin += (e_dir*5);
         if (fftMin <= -155) fftMin = -155;
         fftMin = std::min<float>(fftMax - 10, fftMin);
