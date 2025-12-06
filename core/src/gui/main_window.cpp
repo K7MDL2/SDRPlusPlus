@@ -33,12 +33,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-
+#ifdef __RASPI__
 // Input: device ID (ENC_VFO, ENC_FFT_MIN, ENC_FFT_MAX)
 // Returns: -1 for fail to open, else the fd handle
 
 int MainWindow::open_GPIO_device(int device) {
-#ifdef __RASPI__
+
 	const char * encoder_dev;
 
 	switch (device) {
@@ -61,9 +61,6 @@ int MainWindow::open_GPIO_device(int device) {
     //max_fd = enc_fd;
     //flog::info("ENCODER: return fh = {0}", enc_fd);
 	return enc_fd;
-#else
-	return 0;
-#endif
 }
 
 // Input: Switch device ID
@@ -73,7 +70,6 @@ int MainWindow::read_switch(int device) {
 //    
 // _________ Read Switch____________________
 //
-#ifdef __RASPI__
 	struct input_event ev;
 	struct input_event sw_ev[64];
 	int sw_type, sw_code, sw_value;
@@ -128,7 +124,6 @@ int MainWindow::read_switch(int device) {
 			}
 		}
 	}
-#endif
 	return 0;  // return 0 if nothing happened
 }
 
@@ -139,7 +134,6 @@ int MainWindow::read_encoder(int device) {
 //    
 // _________ Read Encoders ________________________________________
 //
-#ifdef __RASPI__
 	struct input_event ev;
 	struct input_event enc_ev[64];
 	int enc_type, enc_code, enc_count;
@@ -208,9 +202,9 @@ int MainWindow::read_encoder(int device) {
 			}
 		}
 	}
-#endif
 	return 0;  // return 0 counts if nothing happened
 }
+#endif // __RASPI__
 
 void MainWindow::init() {
     LoadingScreen::show("Initializing UI");
@@ -851,6 +845,7 @@ void MainWindow::draw() {
         }
     }
     
+    #ifdef __RASPI__
     if ((e_dir = read_switch(_AUX1_SW)) !=0) { // read switch 
 		if (enc_aux1_sw == _FFT_MIN) {
 			enc_aux1_sw = _FFT_MAX;
@@ -900,6 +895,7 @@ void MainWindow::draw() {
             gui::waterfall.setViewOffset(vfo->centerOffset); // center vfo on screen
         }
     }
+    #endif // __RASPI__
 
     ImGui::NewLine();
 
@@ -913,6 +909,7 @@ void MainWindow::draw() {
         core::configManager.release(true);
     }
 
+    #ifdef __RASPI__
 	if ((enc_aux1_sw == _FFT_MAX) && (e_dir = read_encoder(_AUX1_ENC)) != 0) {  // read Encoder
         fftMax += (e_dir*5);
         if (fftMax >= 0) fftMax = 0;
@@ -921,6 +918,7 @@ void MainWindow::draw() {
 		core::configManager.conf["max"] = fftMax;
         core::configManager.release(true);       
 	}
+    #endif // __RASPI__
 
     ImGui::NewLine();
 
@@ -935,6 +933,7 @@ void MainWindow::draw() {
         core::configManager.release(true);
     }
     
+    #ifdef __RASPI__
     if ((enc_aux1_sw == _FFT_MIN) && (e_dir = read_encoder(_AUX1_ENC)) != 0) {  // read encoder
         fftMin += (e_dir*5);
         if (fftMin <= -155) fftMin = -155;
@@ -943,6 +942,7 @@ void MainWindow::draw() {
 		core::configManager.conf["min"] = fftMin;
         core::configManager.release(true);       
 	}
+    #endif // __RASPI__
 
     ImGui::EndChild();
 
